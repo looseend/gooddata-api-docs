@@ -1,3 +1,796 @@
+FORMAT: X-1A
+
+HOST: https://secure.gooddata.com
+
+#GoodData API Documentation
+The GoodData API is based on REST principles, all you need to use it is your GoodData account. You must be authenticated and call HTTPs requests on the URLs listed below. 
+This documentation covers the core resources you can used to manipulate objects on the GoodData Platform. Review the information basic instructions if you are new to APIs.
+
+>**Note:** Use your GoodData account credentials for API calls.
+
+##Allowed HTTPs requests:
+
+- `POST` - Creates or updates a resource
+- `PUT` - Updates a resource
+- `GET` - Retrieves a resource or list of resources
+- `DELETE` - Delete a resource
+
+##Typical Server Responses
+
+- 200 `OK` - The request was successful (some API calls may return 201 instead).
+- 201 `Created` - The request was successful and a resource was created.
+- 204 `No Content` - The request was successful but there is no representation to return (that is, the response is empty).
+- 400 `Bad Request` - The request could not be understood or was missing required parameters.
+- 401 `Unauthorized` - Authentication failed or user does not have permissions for the requested operation.
+- 403 `Forbidden` - Access denied.
+- 404 `Not Found` - Resource was not found.
+- 405 `Method Not Allowed` - Requested method is not supported for the specified resource.
+- 429 `Too Many Requests` - Exceeded GoodData API limits. Pause requests, wait one minute, and try again. 
+- 503 `Service Unavailable` - The service is temporary unavailable (e.g. scheduled Platform Maintenance). Try again later.
+
+
+# Group Platform Availability 
+<a id="available" ></a>
+
+If The GoodData Platform is in scheduled maintenance, REST API Returns a **503** error code and following message is displayed in the response body:
+
+
+`Scheduled maintenance in progress. Please try again later.`
+
+Otherwise it will return 503 with a descriptive error message. Specific errors messages are listed with individual APIs. You can use **gdc/ping** resource to check the Platform availability.
+
+
+## /gdc/ping
+### GET
+Checks Platform availability.
+
++ Request
+
+    + Headers
+
+            Accept: application/json
+
+
++ Response 204
+
++ Response 503
+
+    + Body 
+    
+            Scheduled maintenance in progress. Please try again later.  
+    
++ Response 503
+
+    + Headers
+    
+            Content-Type: application/json
+        
+    + Body 
+    
+            {"error":{
+                "message": "Internal server error. Please fill in bug report with request_id='{error-id}'"
+            }}
+
+
+# Group Log In 
+<a id="login" ></a>
+
+GoodData authentication uses two kinds of tokens to track user sessions: 
+
+- A long-lived **SST token**, which you obtain when you call `/gdc/account/login` 
+- A short-lived **TT token**, which you obtain when you call `gdc/account/token` using your **SST Token**. This token is encrypted, and is quickly verified by the resource servers.
+
+**Steps:**
+
+1. `POST` your credentials to the login resource. The SST token is returned in the SetCookie header.
+2. `GET` the token resource, and include the SST token in your header. The TT token is returned in the SetCookie header.  
+  You are now authenticated. Include this TT token in a -cookie header on all API calls.
+
+>**Note:** The TT token has limited validity. If you received a 401 Unauthorized Response, GET a new TT token.
+
+#### Additional Information
+
+<!---You can use two methods to obtain and use tokens: _HTTP Cookies_ and _custom headers_. These methods are controlled by `verify_level` property upon login. The advantage of using Cookies (this is what the rich web client does) is that they work without additional non-standard extensions to the HTTP protocol: HTTP Cookies get issued for either of the tokens with appropriate path set. You don't need to specify verify_level if you intend to rely on cookie usage.
+Unfortunately, this can not be used accross domains, and thus can not be used with data staging area. In case your client interfaces with the data uploads, you need set the verify_level property to value of 2. You'll get the token values in responses to login and token resources and you'll need to set the X-GDC-AuthSST and X-GDC-AuthTT headers to appropriate token values whenever they are required.
+-->
+
+## /gdc/account/login
+### POST
+Log in.
+
++ Parameters
+    + login (required, string) ... GoodData login email address
+    + password (required, string) ... GoodData password
+    + remember (required, boolean) ... Specifies whether to remember login credentials.
+    + verify_level (optional, integer, ``) ... Verification level of the token. Specify '0' for HTTP cookies; specify '2' for custom HTTP headers
+
++ Request (application/json)
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
+            {
+                "postUserLogin":{
+                    "login":"user@company.com",
+                    "password":"YourPassword",
+                    "remember":1
+                }
+            }
+
++ Response 200 (application/json)
+    + Headers
+
+            Set-Cookie: GDCAuthTT=; path=/gdc; expires=Mon, 30-Jul-2012 09:12:42 GMT; secure; HttpOnly, GDCAuthSST={super-secured-token}; path=/gdc/account; secure; HttpOnly
+
+    + Body
+
+            {
+                "userLogin":{
+                    "profile":"/gdc/account/profile/{user-id}",
+                    "state":"/gdc/account/login/{user-id}"
+                }
+            }
+
+## /gdc/account/token
+### GET
+Request a TT token.
+
++ Request 
+    + Headers
+
+            Accept: application/json
+            Cookie: Set-Cookie: GDCAuthTT=; path=/gdc; expires=Mon, 30-Jul-2012 09:12:42 GMT; secure; HttpOnly, GDCAuthSST={super-secured-token}; path=/gdc/account; secure; HttpOnly
+
++ Response 200 
+    + Headers
+
+            Set-Cookie: set-cookie: GDCAuthTT={temporary-token}; path=/gdc; expires=Mon, 30-Jul-2012 09:12:42 GMT; secure; HttpOnly, GDCAuthSST={super-secured-token}; path=/gdc/account; secure; HttpOnly
+
+
+## /gdc/account/profile/{user-id}
+### GET
+Retrieves details of your user account, including email addresses, phone number, and authentication provider. This information is also returned after successful authentication. 
+
++ Request 
+    + Headers
+
+            Accept: application/json
+
++ Response 200 
+
+    + Body
+    
+              {
+                 "accountSetting" : {
+                   "country" : "cz",
+                   "firstName" : "Name",
+                   "ssoProvider" : null,
+                   "timezone" : null,
+                   "position" : "",
+                   "authenticationModes" : [],
+                   "companyName" : "GoodData",
+                   "login" : "email@gooddata.com",
+                   "email" : "email@gooddata.com",
+                   "created" : "2011-08-10 08:37:46",
+                   "updated" : "2014-04-11 01:18:07",
+                   "lastName" : "Lastname",
+                   "phoneNumber" : "7755441225",
+                    "links" : {
+                        "self" : "/gdc/account/profile/{profile-id}",
+                        "projects" : "/gdc/account/profile/{profile-id}/projects"
+                              }
+                        }
+                }
+                
+
+## /gdc/account/login/{user-id}
+### DELETE
+Log out.
+
++ Request 
+    + Headers
+
+            Accept: application/json
+
++ Response 200 
+
+
+# Group Objects 
+Objects are the entities in the GoodData Platform. For example, Dashboards, Reports, Metrics, and User Filter are objects. 
+
+## Object Creation [/gdc/md/{project-id}/obj{?createAndGet=true}]
+### Create a New Object [POST]
+Create a new object. The example below creates a new metric. 
+>**Note:** This example does not include the `createAndGet` parameter. 
+
+<!---
++ Parameters
+    + title (required, string) ... Name of the new object
+    + summary (optional, string) ... Object description
+    + tags (optional, boolean) ... Tags to associate with the object. Separate tags with a space.
+    + deprecated (optional, integer, ``) ... Verification level of the token. Specify '0' for HTTP cookies; specify '2' for custom HTTP headers
+    + unlisted (boolean,
+    + expression ( ) specifies the MAQL for the object. 
+    +format (???, ??? ) Specifies the format that metrics are calculated in. Do not use 
+    +folders (???, ???? ) The folder to include the object in.
+    -->
+
+
+
++ Request
+    + Headers
+
+            Content-Type: application/json
+            Accept: application/json
+
+    + Body
+
+            {
+                "metric": {
+                    "meta": {
+                        "title": "My new metric",
+                        "summary": "",
+                        "tags": "",
+                        "deprecated": 0,
+                        "unlisted": 1
+                    },
+                    "content": {
+                        "expression": "SELECT SUM([/gdc/md/{project-id}/obj/{object-id}])",
+                        "format": "#,##0.00",
+                        "folders": []
+                    }
+                }
+            }
+
++ Response 200
+    + Headers
+
+            Content-Type: application/json
+
+    + Body
+
+            {
+                "uri": "/gdc/md/{project-id}/obj/{object-id}"
+            }
+            
+### Create and Retrieve a New Object [POST]
+Use this call to create new object. In this example you create a new metric and receive the complete object instead of link to it.
+
+**With the createAndGet=true parameter.**
+
++ Request
+    + Headers
+
+            Content-Type: application/json
+            Accept: application/json
+
+    + Body
+
+            {
+                "metric": {
+                    "meta": {
+                        "title": "My new metric",
+                        "summary": "",
+                        "tags": "",
+                        "deprecated": 0,
+                        "unlisted": 1
+                    },
+                    "content": {
+                        "expression": "SELECT SUM([/gdc/md/{project-id}/obj/{object-id}])",
+                        "format": "#,##0.00",
+                        "folders": []
+                    }
+                }
+            }
+
++ Response 200
+    + Headers
+
+            Content-Type: application/json
+
+    + Body
+
+            {
+                "metric": {
+                    "content": {
+                        "format": "#,##0.00",
+                        "tree": {
+                            "content": [
+                                {
+                                    "content": [
+                                        {
+                                            "value": "SUM",
+                                            "content": [
+                                                {
+                                                    "value": "/gdc/md/{project-id}/obj/{object-id}",
+                                                    "position": {
+                                                        "column": 12,
+                                                        "line": 2
+                                                    },
+                                                    "type": "fact object"
+                                                }
+                                            ],
+                                            "position": {
+                                                "column": 8,
+                                                "line": 2
+                                            },
+                                            "type": "function"
+                                        }
+                                    ],
+                                    "position": {
+                                        "column": 8,
+                                        "line": 2
+                                    },
+                                    "type": "expression"
+                                }
+                            ],
+                            "position": {
+                                "column": 1,
+                                "line": 2
+                            },
+                            "type": "metric"
+                        },
+                        "expression": "SELECT SUM([/gdc/md/{project-id}/obj/{object-id}])"
+                    },
+                    "meta": {
+                        "author": "/gdc/account/profile/{user-id}",
+                        "uri": "/gdc/md/{project-id}/obj/{object-id}",
+                        "tags": "",
+                        "created": "2014-07-07 10:02:54",
+                        "identifier": "arFtGnK2gysS",
+                        "deprecated": "0",
+                        "summary": "",
+                        "unlisted": 1,
+                        "title": "My new metric",
+                        "category": "metric",
+                        "updated": "2014-07-07 10:02:54",
+                        "contributor": "/gdc/account/profile/{user-id}"
+                    }
+                }
+            }
+          
+## Existing Object Manipulation [/gdc/md/{project-id}/obj/{object-id}]
+### Retrieve an Object [GET]
+Use this call to retrieve an object from the API.
+
++ Request
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
++ Response 200
+    + Headers
+
+            Content-Type: application/json
+
+    + Body
+
+            {
+                "metric": {
+                    "content": {
+                        "format": "#,##0.00",
+                        "tree": {
+                            "content": [
+                                {
+                                    "content": [
+                                        {
+                                            "value": "SUM",
+                                            "content": [
+                                                {
+                                                    "value": "/gdc/md/{project-id}/obj/{object-id}",
+                                                    "position": {
+                                                        "column": 12,
+                                                        "line": 2
+                                                    },
+                                                    "type": "fact object"
+                                                }
+                                            ],
+                                            "position": {
+                                                "column": 8,
+                                                "line": 2
+                                            },
+                                            "type": "function"
+                                        }
+                                    ],
+                                    "position": {
+                                        "column": 8,
+                                        "line": 2
+                                    },
+                                    "type": "expression"
+                                }
+                            ],
+                            "position": {
+                                "column": 1,
+                                "line": 2
+                            },
+                            "type": "metric"
+                        },
+                        "expression": "SELECT SUM([/gdc/md/{project-id}/obj/{object-id}])"
+                    },
+                    "meta": {
+                        "author": "/gdc/account/profile/{user-id}",
+                        "uri": "/gdc/md/{project-id}/obj/{object-id}",
+                        "tags": "",
+                        "created": "2014-07-07 09:50:49",
+                        "identifier": "adZtDDfkfAHG",
+                        "deprecated": "0",
+                        "summary": "",
+                        "unlisted": 1,
+                        "title": "My new metric",
+                        "category": "metric",
+                        "updated": "2014-07-07 09:50:49",
+                        "contributor": "/gdc/account/profile/{user-id}"
+                    }
+                }
+            }
+            
+### Update an Object [PUT]
+Use this call to update existing object. Use the full object body/content with your changes. See the example where we've changed the Metric definition (`SUM` -> `AVG`)
+
++ Request
+    + Headers
+
+            Content-Type: application/json
+            Accept: application/json
+
+    + Body
+    
+            {
+                "metric": {
+                    "content": {
+                        "format": "#,##0.00",
+                        "tree": {
+                            "content": [
+                                {
+                                    "content": [
+                                        {
+                                            "value": "SUM",
+                                            "content": [
+                                                {
+                                                    "value": "/gdc/md/{project-id}/obj/{object-id}",
+                                                    "position": {
+                                                        "column": 12,
+                                                        "line": 2
+                                                    },
+                                                    "type": "fact object"
+                                                }
+                                            ],
+                                            "position": {
+                                                "column": 8,
+                                                "line": 2
+                                            },
+                                            "type": "function"
+                                        }
+                                    ],
+                                    "position": {
+                                        "column": 8,
+                                        "line": 2
+                                    },
+                                    "type": "expression"
+                                }
+                            ],
+                            "position": {
+                                "column": 1,
+                                "line": 2
+                            },
+                            "type": "metric"
+                        },
+                        "expression": "SELECT AVG([/gdc/md/{project-id}/obj/{object-id}])"
+                    },
+                    "meta": {
+                        "author": "/gdc/account/profile/{user-id}",
+                        "uri": "/gdc/md/{project-id}/obj/{object-id}",
+                        "tags": "",
+                        "created": "2014-07-07 09:50:49",
+                        "identifier": "adZtDDfkfAHG",
+                        "deprecated": "0",
+                        "summary": "",
+                        "unlisted": 1,
+                        "title": "My new metric",
+                        "category": "metric",
+                        "updated": "2014-07-07 09:50:49",
+                        "contributor": "/gdc/account/profile/{user-id}"
+                    }
+                }
+            }
+
++ Response 200
+    + Headers
+
+            Content-Type: application/json
+
+    + Body
+
+            {
+                "uri": "/gdc/md/{project-id}/obj/{object-id}"
+            }
+
+### Delete an Object [DELETE]
+Use this resource to delete specific objects.
+
++ Request
+    + Headers
+
+            Content-Type: application/json
+            Accept: application/json
+
+    + Body
+    
+    
++ Response 204
+    + Headers
+
+    + Body
+
+
+# Group Project
+<a id="project" ></a>
+
+Projects are one of the key objects in the GoodData platform. When working with GoodData, you basically create projects (datamarts). Metrics, Reports and Dashboards
+are then created inside Projects. The following two states are key for you and your integrations:
+
+- **ENABLED** - project is ready and available
+- **DELETED** - something is wrong
+
+Once you create a Project with a `POST` request shown below, [poll the returned url](#get-%2Fgdc%2Fprojects%2F%7Bproject-id%7D) and check the Project `state` value until it is **ENABLED** or **DELETED**. Find out more information about how to create a [project programatically on this discussion thread](http://stackoverflow.com/questions/22647479/gooddata-how-to-create-a-project-through-api). Other states that project can be in:
+
+- PREPARING 
+- LOADING
+- PREPARED
+- DISABLED
+- ARCHIVED
+
+###Project Properties  
+- title (string) :   Project Title         
+- summary (string) : Project summary
+- roles (uri) : User's role in the Project
+- userPermissions (uri) : User permissions information
+- userRoles (uri) : User roles information
+- users (uri) : Project users information
+- created (date) : Date of project creation
+- updated (date) : Date of project update 
+- author (uri) : Project creator account
+- exportUsers (boolean) : export users from project true/false 
+- exportData (boolean) : export data from project true/false
+- token (string) : export Token for export/import project usage
+
+## /gdc/projects
+### POST
+To create new project, use following call. Poll the resource that you received as response until it gives you the status: **ENABLED** or **DELETED** 
+See the next API call for more details. 
+
++ Request (application/json)
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
+            { "project" : {
+                   "content" : { "guidedNavigation": 1, "driver" : "Pg", "authorizationToken" : "AUTH_TOKEN"},
+                   "meta" : {
+                   "title" : "Test Project",
+                   "summary" : "Testing Project",
+                   "projectTemplate" : "/projectTemplates/{template-name}/{template-version}"
+                   } }
+            }
+
++ Response 201 (application/json)
+
+        {
+           "uri" : "/gdc/projects/{project-id}"
+        }
+
+## /gdc/projects/{project-id}
+### GET
+To show the Project information after creation or whenever you need it. While creating a new project, poll this resource until the `state` is **ENABLED** or **DELETED**.
+
++ Request 
+    + Headers
+
+            Accept: application/json
+
++ Response 200 (application/json)
+
+        {
+           "project" : {
+              "content" : {
+                 "guidedNavigation" : "1",
+                 "isPublic" : "0",
+                 "state" : "ENABLED"
+              },
+              "links" : {
+                 "roles" : "/gdc/projects/{project-id}/roles",
+                 "ldm_thumbnail" : "/gdc/projects/{project-id}/ldm?thumbnail=1",
+                 "connectors" : "/gdc/projects/{project-id}/connectors",
+                 "self" : "/gdc/projects/{project-id}",
+                 "invitations" : "/gdc/projects/{project-id}/invitations",
+                 "users" : "/gdc/projects/{project-id}/users",
+                 "ldm" : "/gdc/projects/{project-id}/ldm",
+                 "publicartifacts" : "/gdc/projects/{project-id}/publicartifacts",
+                 "metadata" : "/gdc/md/{project-id}",
+                 "templates" : "/gdc/md/{project-id}/templates"
+              },
+              "meta" : {
+                 "created" : "2012-05-01 23:56:01",
+                 "summary" : "Project Summary",
+                 "updated" : "2012-05-01 23:56:01",
+                 "author" : "/gdc/account/profile/{user-id}",
+                 "title" : "Project Name",
+                 "contributor" : "/gdc/account/profile/{user-id}"
+              }
+           }
+        }
+
+### DELETE
+This API call will DELETE your defined project. Only Project ADMIN can do this action.
+
++ Request 
+    + Headers
+
+            Accept: application/json
+
++ Response 200 (application/json)
+
+        {}
+
+## /gdc/account/profile/{user-id}/projects
+### GET
+To list all existing projects
+
++ Request 
+    + Headers
+
+            Accept: application/json
+
++ Response 200 (application/json)
+
+        {
+           "projects" : [
+              {
+                 "project" : {
+                    "content" : {
+                       "guidedNavigation" : "1",
+                       "isPublic" : "0",
+                       "state" : "ENABLED"
+                    },
+                    "links" : {
+                       "roles" : "/gdc/projects/{project-id}/roles",
+                       "ldm_thumbnail" : "/gdc/projects/{project-id}/ldm?thumbnail=1",
+                       "userPermissions" : "/gdc/projects/{project-id}/users/{user-id}/permissions",
+                       "userRoles" : "/gdc/projects/{project-id}/users/{user-id}/roles",
+                       "connectors" : "/gdc/projects/{project-id}/connectors",
+                       "self" : "/gdc/projects/{project-id}",
+                       "invitations" : "/gdc/projects/{project-id}/invitations",
+                       "users" : "/gdc/projects/{project-id}/users",
+                       "ldm" : "/gdc/projects/{project-id}/ldm",
+                       "metadata" : "/gdc/md/{project-id}",
+                       "publicartifacts" : "/gdc/projects/{project-id}/publicartifacts",
+                       "templates" : "/gdc/md/{project-id}/templates"
+                    },
+                    "meta" : {
+                       "created" : "YYYY-MM-DD HH:MM:SS",
+                       "summary" : "Project Summary",
+                       "updated" : "YYYY-MM-DD HH:MM:SS",
+                       "author" : "/gdc/account/profile/{user-id}",
+                       "title" : "Project Name",
+                       "contributor" : "/gdc/account/profile/{user-id}"
+                    }
+                 }
+              } ]
+        }
+
+## /gdc/md/{project-id}/maintenance/export
+### POST
+To Export selected Project - exportUsers and exportData field are not mandatory. You receive Export token that is valid for **48 hours**.
+
++ Request (application/json)
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
+            { "exportProject" : {
+                 "exportUsers" : "1 | 0",
+                 "exportData" : "1 | 0"
+              }
+            }
+
++ Response 200 (application/json)
+
+        {
+           "exportArtifact" : {
+              "status" : {
+                 "uri" : "/gdc/md/{project-id}/etltask/{task-id}"
+              },
+              "token" : "EXPORT_TOKEN"
+           }
+        }
+
+## /gdc/md/{project-id}/maintenance/import
+### POST
+Use this method to import exported Project. Input is the Token exported from previous Export resource. You have to finish export/import during 48 hours (then - the token is no more valid)
+
++ Request (application/json)
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
+            { 
+            "importProject" : {
+              "token" : "TOKEN_STRING"
+              }
+            }
+
++ Response 200 (application/json)
+
+        {
+        "uri" : "/gdc/md/{project-id}/etltask/{task-id}"
+        }
+
+## /gdc/projects/{project-id}/styleSettings
+### PUT
+To create your own custom colour palette in given Project
+
++ Request (application/json)
+    + Headers
+
+            Accept: application/json
+
+    + Body
+
+            {"styleSettings" :
+               {"chartPalette": [ 
+                  { "guid": "guid1", "fill": { "r":255, "g":255, "b":0 } }, 
+                  { "guid": "guid2", "fill": { "r":255, "g":255, "b":40 } }, 
+                  { "guid": "guid3", "fill": { "r":255, "g":255, "b":80 } }, 
+                  { "guid": "guid4", "fill": { "r":255, "g":255, "b":120 } }, 
+                  { "guid": "guid5", "fill": { "r":255, "g":255, "b":180 } }, 
+                  { "guid": "guid6", "fill": { "r":255, "g":255, "b":200 } } 
+                  ]
+               }
+            }
+
++ Response 204 
+
+### GET
+To GET your current color palette
+
++ Request
+    + Headers
+
+            Accept: application/json
+
++ Response 200 (application/json)
+
+        {"styleSettings" :
+           {"chartPalette": [ 
+              { "guid": "guid1", "fill": { "r":255, "g":255, "b":0 } }, 
+              { "guid": "guid2", "fill": { "r":255, "g":255, "b":40 } }, 
+              { "guid": "guid3", "fill": { "r":255, "g":255, "b":80 } }, 
+              { "guid": "guid4", "fill": { "r":255, "g":255, "b":120 } }, 
+              { "guid": "guid5", "fill": { "r":255, "g":255, "b":180 } }, 
+              { "guid": "guid6", "fill": { "r":255, "g":255, "b":200 } } 
+              ]
+           }
+        }
+
+### DELETE
+To Delete/Reset your own custom colour palette in given Project
+
++ Request
+    + Headers
+
+            Accept: application/json
+
++ Response 204
 
 ## /gdc/projects/{project-id}/roles
 ### GET
@@ -4578,8 +5371,8 @@ The following resources are related to the white labeling functionality. Organiz
                     "appleTouchIconUrl":"/icon.png",
                     "applicationBackgroundColor":"#999",
                     "hideRegistration":"true | false",
-                    "applicationBackgroundUrl":"http://www.fws.gov/home/feature/2006/polar_bear_scott_schliebe_usfws.jpg"
-                    "brandColor":"#999"
+                    "applicationBackgroundUrl":"http://www.fws.gov/home/feature/2006/polar_bear_scott_schliebe_usfws.jpg",
+                    "brandColor":"#999",
                     "largeLogoUrl":"http://www.website.com/largelogo.jpg"
                   }
              }
@@ -4653,7 +5446,9 @@ The following resources are related to the white labeling functionality. Organiz
                         "appleTouchIconUrl":"/icon.png",
                         "applicationBackgroundColor":"#999",
                         "hideRegistration":"true",
-                        "applicationBackgroundUrl":"http://www.fws.gov/home/feature/2006/polar_bear_scott_schliebe_usfws.jpg"
+                        "applicationBackgroundUrl":"http://www.fws.gov/home/feature/2006/polar_bear_scott_schliebe_usfws.jpg",
+                        "brandColor":"#999",
+                        "largeLogoUrl":"http://www.website.com/largelogo.jpg"
                       }
                  }
             }
